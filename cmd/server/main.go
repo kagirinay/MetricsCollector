@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -144,4 +145,19 @@ func handleCounter(storage Storage, name, val string) error {
 	return nil
 }
 
-func main() {}
+func main() {
+	// Создаём хранилище.
+	mem := NewMemStorage()
+	// Регистрируем маршрут
+	mux := http.NewServeMux()
+	mux.HandleFunc("/update/", updateHandler(mem))
+	// Инициализируем сервер.
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+	log.Println("Сервер сбора метрик запущен по адрессу http://localhost:8080")
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatalf("Сервер не запустился: %v", err)
+	}
+}
