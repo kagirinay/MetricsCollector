@@ -1,8 +1,16 @@
 package models
 
+// MetricType - строковый идентификатор типа метрики.
+type MetricType string
+
 const (
-	Counter = "counter"
-	Gauge   = "gauge"
+	GaugeType   = "gauge"
+	CounterType = "counter"
+)
+
+type (
+	Gauge   float64
+	Counter int64
 )
 
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
@@ -10,6 +18,7 @@ const (
 // Delta и Value объявлены через указатели,
 // что бы отличать значение "0", от не заданного значения
 // и соответственно не кодировать в структуру.
+/*
 type Metrics struct {
 	ID    string   `json:"id"`
 	MType string   `json:"type"`
@@ -17,3 +26,4 @@ type Metrics struct {
 	Value *float64 `json:"value,omitempty"`
 	Hash  string   `json:"hash,omitempty"`
 }
+*/
