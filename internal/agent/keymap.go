@@ -43,7 +43,7 @@ func (a *Agent) report() {
 		url := a.serverAddr + path
 		resp, err := a.httpClient.Post(url, "text/plain", bytes.NewBuffer(nil))
 		if err != nil {
-			log.Print("Ошибка %s: %v", url, err)
+			log.Printf("Ошибка %s: %v", url, err)
 			continue
 		}
 		_ = resp.Body.Close()
