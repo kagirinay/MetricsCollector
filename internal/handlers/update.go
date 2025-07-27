@@ -1,44 +1,45 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/kagirinay/MetricsCollector.git/internal/store"
 	"github.com/kagirinay/MetricsCollector.git/models"
 )
 
 // Update возвращает http.HandlerFunc, замыкающий хранилище.
 func Update(s store.Storage) http.HandlerFunc {
-	const prefix = "/update/"
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		if !strings.HasPrefix(r.URL.Path, prefix) {
+		// Извлекаем параметры из URL
+		metricType := chi.URLParam(r, "type")
+		metricName := chi.URLParam(r, "name")
+		rawValue := chi.URLParam(r, "value")
+		// Валидация
+		if metricName == "" {
 			w.WriteHeader(http.StatusNotFound)
+
 			return
 		}
-		parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix), "/")
-		if len(parts) != 3 || parts[1] == "" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		typ, name, val := parts[0], parts[1], parts[2]
 		var err error
-		switch models.MetricType(typ) {
+		switch models.MetricType(metricType) {
 		case models.GaugeType:
-			err = handleGauge(s, name, val)
+			err = handleGauge(s, metricName, rawValue)
 		case models.CounterType:
-			err = handleCounter(s, name, val)
+			err = handleCounter(s, metricName, rawValue)
 		default:
-			err = errors.New("Неизвестный тип")
+			w.WriteHeader(http.StatusNotImplemented)
+
+			return
 		}
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
+
 			return
 		}
 		w.WriteHeader(http.StatusOK)
