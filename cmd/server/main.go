@@ -1,24 +1,37 @@
 package main
 
 import (
-	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/kagirinay/MetricsCollector.git/internal/handlers"
 	"github.com/kagirinay/MetricsCollector.git/internal/store"
 )
 
 func main() {
 	st := store.NewMemStorage()
-	mux := http.NewServeMux()
-	mux.HandleFunc("/update", handlers.Update(st))
-	srv := &http.Server{
+	r := chi.NewRouter()
+	// Регистрация обработчиков
+	r.Post("/update/{type}/{name}/{value}", handlers.Update(st))
+	r.Get("/value/{type}/{name}", handlers.GetMetric(st))
+	r.Get("/", handlers.Home(st))
+	server := &http.Server{
 		Addr:    ":8080",
-		Handler: mux,
+		Handler: r,
 	}
-	log.Println("Сервер запущен по адресу: 8080")
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("Ошибка прослушивания: %v", err)
-	}
+	// Безопасное завершение работы
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		log.Println("Сервер запустился по адресу http://localhost:8080")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Ошибка сервера: %v", err)
+		}
+	}()
+	<-done
+	log.Println("Сервер остановлен...")
 }
