@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -20,18 +21,24 @@ func Update(s store.Storage) http.HandlerFunc {
 		metricType := chi.URLParam(r, "type")
 		metricName := chi.URLParam(r, "name")
 		rawValue := chi.URLParam(r, "value")
+		// Декодируем имя метрики из URL-формата
+		name, err := url.PathUnescape(metricName)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+
+			return
+		}
 		// Валидация
-		if metricName == "" {
+		if name == "" || metricName == "" || rawValue == "" {
 			w.WriteHeader(http.StatusNotFound)
 
 			return
 		}
-		var err error
 		switch models.MetricType(metricType) {
 		case models.GaugeType:
-			err = handleGauge(s, metricName, rawValue)
+			err = handleGauge(s, name, rawValue)
 		case models.CounterType:
-			err = handleCounter(s, metricName, rawValue)
+			err = handleCounter(s, name, rawValue)
 		default:
 			w.WriteHeader(http.StatusNotImplemented)
 

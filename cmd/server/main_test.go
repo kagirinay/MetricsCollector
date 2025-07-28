@@ -10,32 +10,39 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kagirinay/MetricsCollector.git/internal/handlers"
 	"github.com/kagirinay/MetricsCollector.git/internal/store"
+	"github.com/kagirinay/MetricsCollector.git/models"
 )
 
-func TastUpdateHandler(t *testing.T) {
+func TestUpdateHandler(t *testing.T) {
 	tests := []struct {
 		name          string
 		url           string
 		wantStatus    int
 		expectGauge   bool
 		expectCounter bool
+		metricName    string
+		metricValue   float64
 	}{
 		{
 			name:        "valid gauge",
 			url:         "/update/gauge/Alloc/123.5",
 			wantStatus:  http.StatusOK,
 			expectGauge: true,
+			metricName:  "Alloc",
+			metricValue: 123.5,
 		},
 		{
 			name:          "valid counter",
 			url:           "/update/counter/Requests/10",
 			wantStatus:    http.StatusOK,
 			expectCounter: true,
+			metricName:    "Requests",
+			metricValue:   10,
 		},
 		{
 			name:       "unknown type",
-			url:        "/update/unknown/a/5",
-			wantStatus: http.StatusBadRequest,
+			url:        "/update/unknown/TestMetric/5",
+			wantStatus: http.StatusNotImplemented,
 		},
 		{
 			name:       "no name",
@@ -47,21 +54,46 @@ func TastUpdateHandler(t *testing.T) {
 			url:        "/update/counter/Bad/notInt",
 			wantStatus: http.StatusBadRequest,
 		},
+		{
+			name:        "very long metric name",
+			url:         "/update/gauge/" + strings.Repeat("a", 1000) + "/42.42",
+			wantStatus:  http.StatusOK,
+			expectGauge: true,
+			metricName:  strings.Repeat("a", 1000),
+			metricValue: 42.42,
+		},
+		{
+			name:        "special characters in name",
+			url:         "/update/gauge/Test%21%40%23%24%25%5E%26%2A%28%29_%2B/42.42",
+			wantStatus:  http.StatusOK,
+			expectGauge: true,
+			metricName:  "Test!@#$%^&*()_+",
+			metricValue: 42.42,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mem := store.NewMemStorage()
-			h := handlers.Update(mem)
+			// Используем chi роутер
+			r := chi.NewRouter()
+			r.Post("/update/{type}/{name}/{value}", handlers.Update(mem))
 			req := httptest.NewRequest(http.MethodPost, tt.url, nil)
 			w := httptest.NewRecorder()
-			h(w, req)
+			r.ServeHTTP(w, req)
 			resp := w.Result()
+			defer resp.Body.Close()
 			if resp.StatusCode != tt.wantStatus {
-				t.Fatalf("expected %d, got %d", tt.wantStatus, resp.StatusCode)
+				t.Errorf("expected %d, got %d", tt.wantStatus, resp.StatusCode)
 			}
+			// Проверка сохранения значений
 			if tt.expectGauge {
-				if v, ok := mem.GetGauge("Alloc"); !ok || v != 123.5 {
-					t.Fatalf("gauge not store correctly, got %v ok=%v", v, ok)
+				if v, ok := mem.GetGauge(tt.metricName); !ok || v != models.Gauge(tt.metricValue) {
+					t.Errorf("Значения корректно не сохраняются, got %v ok=%v", v, ok)
+				}
+			}
+			if tt.expectCounter {
+				if v, ok := mem.GetCounter(tt.metricName); !ok || v != models.Counter(int64(tt.metricValue)) {
+					t.Errorf("Counter не сохраняется корректно, got %v ok=%v", v, ok)
 				}
 			}
 		})
@@ -79,7 +111,7 @@ func TestGetMetricHandler(t *testing.T) {
 			name:       "existing gauge",
 			url:        "/value/gauge/Alloc",
 			wantStatus: http.StatusOK,
-			wantBody:   "123,5",
+			wantBody:   "123.5",
 		},
 		{
 			name:       "non-existing gauge",
@@ -126,11 +158,24 @@ func TestHomeHandlers(t *testing.T) {
 	r.Get("/", handlers.Home(mem))
 	r.ServeHTTP(w, req)
 	resp := w.Result()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Ожидаемый статус: 200, получаемый статус: %d", resp.StatusCode)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), "Alloc") || !strings.Contains(string(body), "Requests") {
-		t.Errorf("Запрашиваемое тело на содержит ожидаемые метрики")
+	bodyStr := string(body)
+	// Проверяем наличие ожидаемых метрик в HTML
+	if !strings.Contains(bodyStr, "Alloc") {
+		t.Errorf("Тело ответа не содержит метрику 'Alloc'")
+	}
+	if !strings.Contains(bodyStr, "Requests") {
+		t.Errorf("Тело ответа не содержит метрику 'Requests'")
+	}
+	// Дополнительные проверки структуры HTML
+	if !strings.Contains(bodyStr, "<table>") {
+		t.Errorf("Тело ответа не содержит HTML таблицу")
+	}
+	if !strings.Contains(bodyStr, "Gauges") || !strings.Contains(bodyStr, "Counters") {
+		t.Errorf("Тело ответа не содержит разделы метрик")
 	}
 }

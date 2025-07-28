@@ -1,24 +1,22 @@
 package handlers
 
 import (
+	"embed"
+	"html/template"
 	"net/http"
-	"path/filepath"
-	"text/template"
 
 	"github.com/kagirinay/MetricsCollector.git/internal/store"
 )
 
+//go:embed templates/*
+var indexTemplate embed.FS
+
 // Home возвращает HTML-страницу со всеми метриками.
 func Home(s store.Storage) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Загружаем шаблон
-		tmplPath := filepath.Join("templates", "index.html")
-		tmpl, err := template.ParseFiles(tmplPath)
-		if err != nil {
-			http.Error(w, "Ошибка при загрузке шаблона: "+err.Error(), http.StatusInternalServerError)
+	// Загружаем шаблон один раз при инициализации
+	tmpl := template.Must(template.ParseFS(indexTemplate, "templates/index.html"))
 
-			return
-		}
+	return func(w http.ResponseWriter, r *http.Request) {
 		// Получаем все метрики
 		data := struct {
 			Gauges   map[string]float64
